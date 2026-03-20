@@ -1,21 +1,578 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <title>我的ECharts图表</title>
-  <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>各仓与整合仓关系可视化图标</title>
+    <!-- Leaflet 核心库 -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', Roboto, sans-serif;
+            background: #eef2f5;
+        }
+        #map {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+            background: #eef2f5;
+        }
+        /* 交互信息面板 */
+        .info-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 28px;
+            font-size: 13px;
+            font-family: monospace;
+            z-index: 1000;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
+            border-left: 4px solid #ff9800;
+        }
+        /* 统计面板 */
+        .stats-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            padding: 12px 18px;
+            border-radius: 16px;
+            color: #f0f0f0;
+            font-size: 13px;
+            line-height: 1.5;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border-right: 3px solid #ff9800;
+            pointer-events: none;
+            min-width: 200px;
+        }
+        .stats-panel h4 {
+            margin: 0 0 8px 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: #ffaa66;
+            text-align: center;
+        }
+        .stats-panel p {
+            margin: 4px 0;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .legend-dot {
+            width: 14px;
+            height: 14px;
+            background: #ff8c42;
+            border-radius: 50%;
+            border: 1px solid white;
+        }
+        .legend-line {
+            width: 30px;
+            height: 3px;
+            background: #3b82f6;
+            border-radius: 2px;
+        }
+        .map-title {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(5px);
+            padding: 6px 14px;
+            border-radius: 30px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.2);
+        }
+        @media (max-width: 600px) {
+            .stats-panel { font-size: 10px; padding: 8px 12px; min-width: 170px; }
+            .info-panel { font-size: 10px; padding: 6px 12px; }
+            .map-title { font-size: 10px; top: 10px; left: 10px; }
+        }
+        .custom-popup .leaflet-popup-content-wrapper {
+            background: #2c2c2c;
+            color: #f5f5f5;
+            border-radius: 12px;
+            border-left: 4px solid #ff8c42;
+        }
+        .warehouse-tooltip {
+            background: rgba(0,0,0,0.8);
+            border: 1px solid #ff8c42;
+            border-radius: 6px;
+            color: #ffdd99;
+            font-size: 12px;
+            padding: 4px 10px;
+            white-space: nowrap;
+        }
+        .province-tooltip {
+            background: rgba(0,0,0,0.7);
+            color: #ffdd99;
+            border-radius: 4px;
+            font-size: 12px;
+            padding: 2px 6px;
+            border: 1px solid #ffaa66;
+        }
+        .loading-tip {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            z-index: 2000;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        /* 控制按钮组右对齐 */
+        .leaflet-control-container .leaflet-top.leaflet-right {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .custom-control-btn {
+            background: white;
+            width: 34px;
+            height: 34px;
+            border-radius: 4px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            cursor: pointer;
+            text-align: center;
+            line-height: 34px;
+            font-size: 20px;
+            transition: all 0.2s;
+        }
+        .custom-control-btn:hover {
+            background: #f0f0f0;
+        }
+    </style>
 </head>
 <body>
-  <div id="main" style="width:100%;height:500px;"></div>
-  <script>
-    var myChart = echarts.init(document.getElementById('main'));
-    var option = {
-      title: { text: '公开ECharts图表' },
-      xAxis: { data: ['周一','周二','周三','周四'] },
-      yAxis: {},
-      series: [{ type: 'bar', data: [12,35,24,46] }]
-    };
-    myChart.setOption(option);
-  </script>
+<div id="map"></div>
+
+<div class="info-panel" id="coordPanel">
+    🖱️ 移动鼠标: 等待坐标...<br>
+    📍 最后点击: 暂无
+</div>
+
+<div class="stats-panel" id="statsPanel">
+    <h4>📦 信息说明</h4>
+    <p>🏭 总仓库数: <strong id="totalCount">0</strong> 个</p>
+    <p>🏢 整合仓: <strong id="hubCount">0</strong> 个</p>
+    <div class="legend-item">
+        <div class="legend-dot"></div>
+        <span>普通仓库</span>
+    </div>
+    <div class="legend-item">
+        <div class="legend-dot" style="background: #e34234; width: 18px; height: 18px;"></div>
+        <span>整合仓</span>
+    </div>
+    <div class="legend-item">
+        <div class="legend-line"></div>
+        <span>供应关系连线</span>
+    </div>
+    <div class="legend-item" style="margin-top: 6px;">
+        <span style="font-size: 11px;"> 点击右上角「🔗」一键显示所有线路</span>
+    </div>
+</div>
+
+<div class="map-title">
+    各仓与整合仓关系可视化图标
+</div>
+
+<script>
+    (function() {
+        // ======================= 1. 仓库数据 (42个，含经纬度) =======================
+        const warehouses = [
+            { name: "（上海）金铃狮丽水仓", lng: 119.862325, lat: 28.404697 },
+            { name: "（上海）金铃狮北京仓", lng: 117.01, lat: 40.09 },
+            { name: "（上海）金铃狮南京仓", lng: 118.565277, lat: 31.85925 },
+            { name: "（上海）金铃狮合肥仓", lng: 117.351193, lat: 31.984743 },
+            { name: "（上海）金铃狮嘉兴仓", lng: 120.447007, lat: 30.50392 },
+            { name: "（上海）金铃狮徐州仓", lng: 117.11, lat: 34.28 },
+            { name: "（上海）金铃狮武汉仓", lng: 114.16, lat: 30.58 },
+            { name: "（上海）金铃狮苏州仓", lng: 120.706775, lat: 31.565225 },
+            { name: "（上海）金铃狮荆门仓", lng: 112.24, lat: 31.1 },
+            { name: "（上海）金铃狮衡阳仓", lng: 112.42, lat: 26.98 },
+            { name: "（上海）金铃狮郑州仓", lng: 113.27, lat: 34.84 },
+            { name: "（上海）金铃狮长沙仓", lng: 112.85, lat: 28.31 },
+            { name: "（上海）金铃狮驻马店仓", lng: 114.07, lat: 33.05 },
+            { name: "（广东）塔斯汀南宁仓", lng: 108.39, lat: 22.68 },
+            { name: "（广东）塔斯汀广州仓", lng: 113.53, lat: 23.14 },
+            { name: "（广东）塔斯汀惠阳仓", lng: 114.47, lat: 22.76 },
+            { name: "（广东）塔斯汀柳州仓", lng: 109.42, lat: 24.21 },
+            { name: "（广东）塔斯汀江门仓", lng: 112.933829, lat: 22.757312 },
+            { name: "（广东）塔斯汀海南仓", lng: 110.02, lat: 19.92 },
+            { name: "（广东）塔斯汀潮州仓", lng: 116.57, lat: 23.69 },
+            { name: "金铃狮乌鲁木齐仓", lng: 87.29, lat: 43.9 },
+            { name: "金铃狮兰州仓", lng: 103.93, lat: 36.31 },
+            { name: "金铃狮南充仓", lng: 106.195696, lat: 30.838799 },
+            { name: "金铃狮南昌仓", lng: 115.956513, lat: 28.836208 },
+            { name: "金铃狮呼和浩特仓", lng: 111.477015, lat: 40.70879 },
+            { name: "金铃狮咸阳仓", lng: 108.68268, lat: 34.40647 },
+            { name: "金铃狮哈尔滨仓", lng: 126.530165, lat: 45.84744 },
+            { name: "金铃狮天津仓", lng: 117.327697, lat: 39.244688 },
+            { name: "金铃狮太原仓", lng: 112.685295, lat: 37.644427 },
+            { name: "金铃狮成都仓", lng: 104.173423, lat: 30.524895 },
+            { name: "金铃狮昆明仓", lng: 102.833809, lat: 24.774667 },
+            { name: "金铃狮沈阳仓", lng: 123.196692, lat: 41.750641 },
+            { name: "金铃狮济南仓", lng: 116.800844, lat: 36.604682 },
+            { name: "金铃狮漳州仓", lng: 117.885722, lat: 24.557399 },
+            { name: "金铃狮石家庄仓", lng: 114.688672, lat: 38.330414 },
+            { name: "金铃狮福州总仓", lng: 119.281967, lat: 25.953979 },
+            { name: "金铃狮贵阳仓", lng: 106.886632, lat: 26.495613 },
+            { name: "金铃狮赣州仓", lng: 114.889215, lat: 25.889303 },
+            { name: "金铃狮重庆仓", lng: 106.640684, lat: 29.329005 },
+            { name: "金铃狮银川仓", lng: 106.318521, lat: 38.558527 },
+            { name: "金铃狮长春仓", lng: 125.49, lat: 43.95 },
+            { name: "金铃狮青岛仓", lng: 120.34463, lat: 36.364822 }
+        ];
+
+        // ======================= 2. 父子关系映射 =======================
+        const hubNames = [
+            "（广东）塔斯汀广州仓",
+            "（上海）金铃狮丽水仓",
+            "（上海）金铃狮武汉仓",
+            "（上海）金铃狮北京仓",
+            "金铃狮长春仓",
+            "金铃狮贵阳仓",
+            "金铃狮兰州仓"
+        ];
+
+        const parentMap = new Map();
+        const relationData = [
+            { child: "（广东）塔斯汀惠阳仓", parent: "（广东）塔斯汀广州仓", time: 2.12 },
+            { child: "（广东）塔斯汀潮州仓", parent: "（广东）塔斯汀广州仓", time: 3.89 },
+            { child: "（广东）塔斯汀江门仓", parent: "（广东）塔斯汀广州仓", time: 1.65 },
+            { child: "（广东）塔斯汀海南仓", parent: "（广东）塔斯汀广州仓", time: 7.55 },
+            { child: "金铃狮赣州仓", parent: "（广东）塔斯汀广州仓", time: 4.48 },
+            { child: "金铃狮漳州仓", parent: "（广东）塔斯汀广州仓", time: 5.98 },
+            { child: "（上海）金铃狮苏州仓", parent: "（上海）金铃狮丽水仓", time: 5.01 },
+            { child: "（上海）金铃狮南京仓", parent: "（上海）金铃狮丽水仓", time: 5.48 },
+            { child: "（上海）金铃狮嘉兴仓", parent: "（上海）金铃狮丽水仓", time: 3.41 },
+            { child: "金铃狮福州总仓", parent: "（上海）金铃狮丽水仓", time: 4.91 },
+            { child: "（上海）金铃狮徐州仓", parent: "（上海）金铃狮武汉仓", time: 6.72 },
+            { child: "金铃狮南昌仓", parent: "（上海）金铃狮武汉仓", time: 3.86 },
+            { child: "（上海）金铃狮郑州仓", parent: "（上海）金铃狮武汉仓", time: 5.7 },
+            { child: "（上海）金铃狮驻马店仓", parent: "（上海）金铃狮武汉仓", time: 3.27 },
+            { child: "（上海）金铃狮荆门仓", parent: "（上海）金铃狮武汉仓", time: 2.61 },
+            { child: "（上海）金铃狮长沙仓", parent: "（上海）金铃狮武汉仓", time: 3.66 },
+            { child: "（上海）金铃狮衡阳仓", parent: "（上海）金铃狮武汉仓", time: 5.04 },
+            { child: "（上海）金铃狮合肥仓", parent: "（上海）金铃狮武汉仓", time: 4.16 },
+            { child: "金铃狮太原仓", parent: "（上海）金铃狮北京仓", time: 6.14 },
+            { child: "金铃狮青岛仓", parent: "（上海）金铃狮北京仓", time: 6.68 },
+            { child: "金铃狮济南仓", parent: "（上海）金铃狮北京仓", time: 5.1 },
+            { child: "金铃狮呼和浩特仓", parent: "（上海）金铃狮北京仓", time: 6.25 },
+            { child: "金铃狮石家庄仓", parent: "（上海）金铃狮北京仓", time: 3.4 },
+            { child: "金铃狮天津仓", parent: "（上海）金铃狮北京仓", time: 1.44 },
+            { child: "金铃狮哈尔滨仓", parent: "金铃狮长春仓", time: 2.64 },
+            { child: "金铃狮沈阳仓", parent: "金铃狮长春仓", time: 3.51 },
+            { child: "金铃狮成都仓", parent: "金铃狮贵阳仓", time: 6.75 },
+            { child: "金铃狮南充仓", parent: "金铃狮贵阳仓", time: 6.07 },
+            { child: "（广东）塔斯汀柳州仓", parent: "金铃狮贵阳仓", time: 5.36 },
+            { child: "（广东）塔斯汀南宁仓", parent: "金铃狮贵阳仓", time: 5.48 },
+            { child: "金铃狮昆明仓", parent: "金铃狮贵阳仓", time: 6.17 },
+            { child: "金铃狮重庆仓", parent: "金铃狮贵阳仓", time: 3.73 },
+            { child: "金铃狮咸阳仓", parent: "金铃狮兰州仓", time: 6.85 },
+            { child: "金铃狮银川仓", parent: "金铃狮兰州仓", time: 3.72 },
+            { child: "金铃狮乌鲁木齐仓", parent: "金铃狮兰州仓", time: 19.98 }
+        ];
+
+        relationData.forEach(rel => {
+            parentMap.set(rel.child, { parent: rel.parent, time: rel.time });
+        });
+
+        const hubToChildren = new Map();
+        for (let [child, { parent }] of parentMap.entries()) {
+            if (!hubToChildren.has(parent)) hubToChildren.set(parent, []);
+            hubToChildren.get(parent).push(child);
+        }
+
+        document.getElementById('totalCount').innerText = warehouses.length;
+        document.getElementById('hubCount').innerText = hubNames.length;
+
+        // ======================= 3. 初始化地图 =======================
+        const chinaBounds = [[18, 73], [53, 135]];
+        const map = L.map('map').setView([35.0, 105.0], 5);
+        map.setMaxBounds(chinaBounds);
+        map.setMinZoom(4);
+        map.setMaxZoom(10);
+
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'loading-tip';
+        loadingDiv.innerText = '正在加载中国边界数据...';
+        document.body.appendChild(loadingDiv);
+
+        const geoJsonUrl = 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json';
+        fetch(geoJsonUrl)
+            .then(res => res.json())
+            .then(data => {
+                loadingDiv.remove();
+                const provincesFeatures = data.features.filter(f => f.properties.level === 'province');
+                L.geoJSON(provincesFeatures, {
+                    style: { color: '#aaa', weight: 1.2, fill: false, opacity: 0.8 },
+                    onEachFeature: (feature, layer) => {
+                        const name = feature.properties.name;
+                        if (name) layer.bindTooltip(name, { sticky: true, className: 'province-tooltip' });
+                    }
+                }).addTo(map);
+                L.control.scale({ metric: true, imperial: false, position: 'bottomleft' }).addTo(map);
+            })
+            .catch(err => {
+                console.error(err);
+                loadingDiv.innerText = '边界加载失败，仅显示仓库点';
+                loadingDiv.style.background = 'rgba(200,0,0,0.7)';
+                setTimeout(() => loadingDiv.remove(), 3000);
+            });
+
+        // ======================= 4. 创建仓库标记 =======================
+        const markersGroup = L.layerGroup().addTo(map);
+        const markerMap = new Map();
+
+        warehouses.forEach(wh => {
+            const isHub = hubNames.includes(wh.name);
+            const radius = isHub ? 13 : 7;
+            const fillColor = isHub ? '#e34234' : '#ff8c42';
+            const circle = L.circleMarker([wh.lat, wh.lng], {
+                radius: radius,
+                fillColor: fillColor,
+                color: '#ffffff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(markersGroup);
+
+            circle.bindTooltip(wh.name, { permanent: false, direction: 'top', offset: [0, -8], className: 'warehouse-tooltip' });
+            let popupHtml = `<div><strong>${wh.name}</strong><br>📍 ${wh.lat.toFixed(4)}, ${wh.lng.toFixed(4)}`;
+            if (isHub) popupHtml += `<br>🏢 整合仓 (管理下级仓库)`;
+            popupHtml += `</div>`;
+            circle.bindPopup(popupHtml, { maxWidth: 260, className: 'custom-popup' });
+
+            markerMap.set(wh.name, circle);
+        });
+
+        // ======================= 5. 创建线条（无箭头） =======================
+        const allLines = [];
+        const childLineMap = new Map();
+        const hubLinesMap = new Map();
+
+        function getCoordByName(name) {
+            const wh = warehouses.find(w => w.name === name);
+            return wh ? [wh.lat, wh.lng] : null;
+        }
+
+        for (let [child, { parent, time }] of parentMap.entries()) {
+            const childCoord = getCoordByName(child);
+            const parentCoord = getCoordByName(parent);
+            if (!childCoord || !parentCoord) continue;
+
+            // 线条
+            const line = L.polyline([childCoord, parentCoord], {
+                color: '#3b82f6',
+                weight: 2.5,
+                opacity: 0,
+                lineCap: 'round',
+                interactive: false
+            }).addTo(map);
+            allLines.push(line);
+            childLineMap.set(child, line);
+
+            if (!hubLinesMap.has(parent)) hubLinesMap.set(parent, []);
+            hubLinesMap.get(parent).push(line);
+
+            // 子仓弹窗增加时间
+            const childMarker = markerMap.get(child);
+            if (childMarker) {
+                childMarker.bindPopup(`<div><strong>${child}</strong><br>📍 ${childCoord[0].toFixed(4)}, ${childCoord[1].toFixed(4)}<br>🚛 至整合仓: ${parent}<br>⏱️ 行驶时间: ${time} 小时</div>`, { maxWidth: 260, className: 'custom-popup' });
+            }
+        }
+
+        // 整合仓弹窗增加下级列表
+        for (let hub of hubNames) {
+            const children = hubToChildren.get(hub);
+            if (children && children.length > 0) {
+                const hubMarker = markerMap.get(hub);
+                if (hubMarker) {
+                    const childList = children.map(c => `• ${c} (${parentMap.get(c).time}h)`).join('<br>');
+                    hubMarker.bindPopup(`<div><strong>${hub}</strong><br>📍 整合仓<br>📦 管理 ${children.length} 个下级仓库:<br>${childList}</div>`, { maxWidth: 280, className: 'custom-popup' });
+                }
+            }
+        }
+
+        // ======================= 6. 交互逻辑 =======================
+        function hideAllLines() {
+            allLines.forEach(line => line.setStyle({ opacity: 0 }));
+        }
+
+        function showLines(linesToShow) {
+            if (!linesToShow) return;
+            if (Array.isArray(linesToShow)) {
+                linesToShow.forEach(line => line.setStyle({ opacity: 0.85 }));
+            } else {
+                linesToShow.setStyle({ opacity: 0.85 });
+            }
+        }
+
+        // 一键显示所有线路
+        function showAllLines() {
+            hideAllLines(); // 先全部隐藏再显示所有
+            allLines.forEach(line => line.setStyle({ opacity: 0.85 }));
+            const panel = document.getElementById('coordPanel');
+            if (panel) {
+                const mouseInfo = panel.innerHTML.split('<br>📍 最后点击:')[0];
+                panel.innerHTML = `${mouseInfo}<br>📍 最后点击: 已显示全部线路 (${allLines.length}条)`;
+            }
+        }
+
+        // 仓库点击事件
+        warehouses.forEach(wh => {
+            const marker = markerMap.get(wh.name);
+            if (!marker) return;
+
+            marker.on('click', () => {
+                hideAllLines();
+                if (hubNames.includes(wh.name)) {
+                    const linesArray = hubLinesMap.get(wh.name);
+                    if (linesArray && linesArray.length) {
+                        showLines(linesArray);
+                        const panel = document.getElementById('coordPanel');
+                        if (panel) {
+                            const mouseInfo = panel.innerHTML.split('<br>📍 最后点击:')[0];
+                            panel.innerHTML = `${mouseInfo}<br>📍 最后点击: ${wh.name} (整合仓，显示${linesArray.length}条连线)`;
+                        }
+                    } else {
+                        const panel = document.getElementById('coordPanel');
+                        if (panel) {
+                            const mouseInfo = panel.innerHTML.split('<br>📍 最后点击:')[0];
+                            panel.innerHTML = `${mouseInfo}<br>📍 最后点击: ${wh.name} (无下级仓库)`;
+                        }
+                    }
+                } else {
+                    const line = childLineMap.get(wh.name);
+                    if (line) {
+                        showLines(line);
+                        const parentInfo = parentMap.get(wh.name);
+                        const panel = document.getElementById('coordPanel');
+                        if (panel) {
+                            const mouseInfo = panel.innerHTML.split('<br>📍 最后点击:')[0];
+                            panel.innerHTML = `${mouseInfo}<br>📍 最后点击: ${wh.name} → ${parentInfo.parent} (${parentInfo.time}h)`;
+                        }
+                    } else {
+                        const panel = document.getElementById('coordPanel');
+                        if (panel) {
+                            const mouseInfo = panel.innerHTML.split('<br>📍 最后点击:')[0];
+                            panel.innerHTML = `${mouseInfo}<br>📍 最后点击: ${wh.name} (无关联线条)`;
+                        }
+                    }
+                }
+            });
+        });
+
+        // ======================= 7. 鼠标坐标与地图点击 =======================
+        const coordPanel = document.getElementById('coordPanel');
+        map.on('mousemove', function(e) {
+            const lat = e.latlng.lat.toFixed(5);
+            const lng = e.latlng.lng.toFixed(5);
+            if (coordPanel) {
+                const clickPart = coordPanel.innerHTML.split('<br>📍 最后点击:')[1];
+                coordPanel.innerHTML = `🖱️ 移动鼠标: ${lat}, ${lng}<br>📍 最后点击:${clickPart ? clickPart : ' 暂无'}`;
+            }
+        });
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(5);
+            const lng = e.latlng.lng.toFixed(5);
+            if (coordPanel) {
+                const mousePart = coordPanel.innerHTML.split('<br>📍 最后点击:')[0];
+                coordPanel.innerHTML = `${mousePart}<br>📍 最后点击: 地图 [${lat}, ${lng}]`;
+            }
+        });
+
+        // ======================= 8. 自定义控制按钮 =======================
+        // 重置视图
+        const resetViewBtn = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: () => {
+                const btn = L.DomUtil.create('div', 'custom-control-btn');
+                btn.innerHTML = '🗺️';
+                btn.title = '重置视图';
+                btn.onclick = () => { map.setView([35.0, 105.0], 5); hideAllLines(); };
+                return btn;
+            }
+        });
+        map.addControl(new resetViewBtn());
+
+        // 显示/隐藏仓库标记
+        const toggleMarkersBtn = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: () => {
+                const btn = L.DomUtil.create('div', 'custom-control-btn');
+                btn.innerHTML = '🏷️';
+                btn.title = '显示/隐藏仓库标记';
+                let visible = true;
+                btn.onclick = () => {
+                    if (visible) { map.removeLayer(markersGroup); visible = false; btn.style.opacity = '0.7'; }
+                    else { map.addLayer(markersGroup); visible = true; btn.style.opacity = '1'; }
+                };
+                return btn;
+            }
+        });
+        map.addControl(new toggleMarkersBtn());
+
+        // 一键显示所有线路
+        const showAllLinesBtn = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: () => {
+                const btn = L.DomUtil.create('div', 'custom-control-btn');
+                btn.innerHTML = '🔗';
+                btn.title = '显示所有供应线路';
+                btn.onclick = () => { showAllLines(); };
+                return btn;
+            }
+        });
+        map.addControl(new showAllLinesBtn());
+
+        // 全屏按钮
+        const fullscreenBtn = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: () => {
+                const btn = L.DomUtil.create('div', 'custom-control-btn');
+                btn.innerHTML = '⛶';
+                btn.title = '全屏模式';
+                btn.onclick = () => { const elem = document.documentElement; if (elem.requestFullscreen) elem.requestFullscreen(); };
+                return btn;
+            }
+        });
+        map.addControl(new fullscreenBtn());
+
+        setTimeout(() => {
+            L.popup({ closeButton: true, autoClose: 4000 })
+                .setLatLng([32.0, 110.0])
+                .setContent(`<div style="text-align:center;">🌟 仓储关系地图<br>📦 整合仓红色标记<br>🖱️ 点击仓库查看供应连线<br>🔗 点击右上角「🔗」显示所有线路</div>`)
+                .openOn(map);
+        }, 1000);
+
+        window.addEventListener('resize', () => map.invalidateSize());
+        console.log('✅ 地图加载完成，共42个仓库，7个整合仓，35条供应关系');
+    })();
+</script>
 </body>
 </html>
