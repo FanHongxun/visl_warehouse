@@ -322,7 +322,7 @@
         loadingDiv.innerText = '正在加载中国边界数据...';
         document.body.appendChild(loadingDiv);
 
-        const geoJsonUrl = 'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json';
+        const geoJsonUrl = 'https://raw.githubusercontent.com/hujiangyang/geo/master/china.json';
         fetch(geoJsonUrl)
             .then(res => res.json())
             .then(data => {
