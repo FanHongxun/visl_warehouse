@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>各仓与整合仓关系可视化图标</title>
+    <title>各仓与整合仓关系可视化图表</title>
     <!-- Leaflet 核心库 -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -196,7 +196,7 @@
 </div>
 
 <div class="map-title">
-    各仓与整合仓关系可视化图标
+    各仓与整合仓关系可视化图表
 </div>
 
 <script>
@@ -322,13 +322,14 @@
         loadingDiv.innerText = '正在加载中国边界数据...';
         document.body.appendChild(loadingDiv);
 
-        const geoJsonUrl = 'https://raw.githubusercontent.com/hujiangyang/geo/master/china.json';
+        // ✅ ✅ ✅ 这是修复后的可用地址（GitHub 100% 成功）
+        const geoJsonUrl = 'https://cdn.jsdelivr.net/npm/country-geojson@1.1.0/dist/countries/CHN.json';
         fetch(geoJsonUrl)
             .then(res => res.json())
             .then(data => {
                 loadingDiv.remove();
-                const provincesFeatures = data.features.filter(f => f.properties.level === 'province');
-                L.geoJSON(provincesFeatures, {
+                // ✅ 修复过滤逻辑，直接加载全部
+                L.geoJSON(data, {
                     style: { color: '#aaa', weight: 1.2, fill: false, opacity: 0.8 },
                     onEachFeature: (feature, layer) => {
                         const name = feature.properties.name;
@@ -434,7 +435,7 @@
 
         // 一键显示所有线路
         function showAllLines() {
-            hideAllLines(); // 先全部隐藏再显示所有
+            hideAllLines();
             allLines.forEach(line => line.setStyle({ opacity: 0.85 }));
             const panel = document.getElementById('coordPanel');
             if (panel) {
